@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
   // Define needed number//
   ////////////////////////
 
-  const int NUM_BINS = 10000; // 10000[ns]/NUM_BINS is the timing resolution
+  const int NUM_BINS = 1000; // 10000[ns]/NUM_BINS is the timing resolution
   const double T_MAX = 4;     //[us]
   cout << "Number of bins: " << NUM_BINS << endl;
   cout << "Maximum time: " << T_MAX << " mu s" << endl;
@@ -83,16 +83,24 @@ int main(int argc, char *argv[]) {
   TFile *file_Sample_1 = new TFile(argv[1]);
   TTree *Tree_Sample_1 = (TTree *)file_Sample_1->Get(
       "ScintSim_tree"); // If it works on total photon, it works on vuv
+  TTree *Event_Data_1 = (TTree *)file_Sample_1->Get("event_tree");
 
   vector<vector<double>> *total_time_vuv_sample_1 = nullptr;
+  vector<double> *initial_particle_energy_sample_1 = nullptr;
   Tree_Sample_1->SetBranchAddress("total_time_vuv", &total_time_vuv_sample_1);
+  Event_Data_1->SetBranchAddress("particle_initial_energy",
+				  &initial_particle_energy_sample_1);
 
   TFile *file_Sample_2 = new TFile(argv[2]);
   TTree *Tree_Sample_2 = (TTree *)file_Sample_2->Get(
       "ScintSim_tree"); // If it works on total photon, it works on vuv
+  TTree *Event_Data_2 = (TTree *)file_Sample_2->Get("event_tree");
 
   vector<vector<double>> *total_time_vuv_sample_2 = nullptr;
+  vector<double> *initial_particle_energy_sample_2 = nullptr;
   Tree_Sample_2->SetBranchAddress("total_time_vuv", &total_time_vuv_sample_2);
+  Event_Data_2->SetBranchAddress("particle_initial_energy",
+				  &initial_particle_energy_sample_2);
 
   cout << "Files opened" << endl;
 
@@ -103,8 +111,15 @@ int main(int argc, char *argv[]) {
   int number_events_sample_1 =
       Tree_Sample_1->GetEntries(); // Number of events for 5.6 MeV electrons
   int number_events_sample_2 =
-      Tree_Sample_2->GetEntries(); // Number of events for Rn222,for now it's
+     Tree_Sample_2->GetEntries(); // Number of events for Rn222,for now it's
                                    // all 1 million events
+
+  vector<double> energy_sample_1(number_events_sample_1);
+  vector<double> energy_sample_2(number_events_sample_2);
+
+  vector<double> number_photons_sample_1(number_events_sample_1);
+  vector<double> number_photons_sample_2(number_events_sample_2);
+
 
   cout << "Number of events in sample 1: " << number_events_sample_1 << endl;
   cout << "Number of events in sample 2: " << number_events_sample_2 << endl;
@@ -116,9 +131,12 @@ int main(int argc, char *argv[]) {
   // Finding t0 over all events!
   for (int i = 0; i < number_events_sample_1; i++) {
     Tree_Sample_1->GetEntry(i);
+    Event_Data_1->GetEntry(i);
+    energy_sample_1[i] = initial_particle_energy_sample_1->at(0);
 
     for (int j = 0; j < total_time_vuv_sample_1->size();
          j++) { // Loop through all pmts
+	number_photons_sample_1[i] += total_time_vuv_sample_1->at(j).size();
 
       for (int k = 0; k < total_time_vuv_sample_1->at(j).size();
            k++) { // Loop thorugh all photons in each pmt
@@ -136,9 +154,20 @@ int main(int argc, char *argv[]) {
   // Finding t0 over all events!
   for (int i = 0; i < number_events_sample_2; i++) {
     Tree_Sample_2->GetEntry(i);
+    Event_Data_2->GetEntry(i);
+    cout << "Event " << i << endl;
+
+    if (initial_particle_energy_sample_2->size() > 0) {
+      energy_sample_2[i] = initial_particle_energy_sample_2->at(0);
+    } else {
+      energy_sample_2[i] = 0;
+    }
+    cout << "Energy: " << energy_sample_2[i] << endl;
+
 
     for (int j = 0; j < total_time_vuv_sample_2->size();
          j++) { // Loop through all pmts
+	number_photons_sample_2[i] += total_time_vuv_sample_2->at(j).size();
 
       for (int k = 0; k < total_time_vuv_sample_2->at(j).size();
            k++) { // Loop thorugh all photons in each pmt
@@ -263,6 +292,9 @@ int main(int argc, char *argv[]) {
 
   } // End for loop filling running integral differences
 
+  for( int i = 0; i < NUM_BINS; i++){
+  max_Bin= i;
+  if( i < 100){
   double biggest_diff_time = (double)max_Bin / (double)NUM_BINS;
   cout << "The biggest difference is at time "
        << biggest_diff_time * T_MAX * 1000 << " ns with" << biggest_diff
@@ -309,6 +341,7 @@ int main(int argc, char *argv[]) {
   TH1D *fprompt_sample_1 = new TH1D("fprompt_sample_1", "test", 50, 0, 1);
   TH1D *fprompt_sample_2 = new TH1D("fprompt_sample_2", "test", 50, 0, 1);
 
+
   vector<double> prompt_fraction_sample_1(number_events_sample_1, 0);
   for (int EventIt = 0; EventIt < number_events_sample_1; EventIt++) {
     prompt_fraction_sample_1[EventIt] =
@@ -327,37 +360,32 @@ int main(int argc, char *argv[]) {
   /* //Draw// */
   /* //////// */
 
-  TCanvas *c1 = new TCanvas("c1", "c1", 1000, 800);
-  TLegend *leg_sample = new TLegend(0.25, 0.7, 0.45, 0.93);
-  pulse_shape_sample_1->SetTitle("Pulse Shape for all PMTs");
-  pulse_shape_sample_1->GetXaxis()->SetTitle("time (#mus)");
-  /* pulse_shape_sample_2->Scale(1./pulse_shape_sample_2->Integral()); */
-  /* pulse_shape_sample_1->Scale(1./pulse_shape_sample_1->Integral()); */
-  /* pulse_shape_sample_2->Scale(0.035/MaxAmp2); */
-  /* pulse_shape_sample_1->Scale(0.035/MaxAmp1); */
-  /* pulse_shape_sample_1->GetXaxis()->SetRangeUser(0,0.4);*/
-  pulse_shape_sample_1->SetLineColor(1);
-  pulse_shape_sample_2->SetLineColor(2);
-  pulse_shape_sample_1->SetLineWidth(3);
-  pulse_shape_sample_2->SetLineWidth(3);
-  leg_sample->AddEntry(pulse_shape_sample_1, "Sample 1");
-  leg_sample->AddEntry(pulse_shape_sample_2, "Sample 2");
-  pulse_shape_sample_1->Draw("HIST");
-  pulse_shape_sample_2->Draw("SAME HIST");
-  leg_sample->Draw("SAME");
-  c1->SetLogy();
-  c1->SaveAs(Form("%spulse_shape.png", OutputDir.c_str()));
-  delete c1;
+/*   TCanvas *c1 = new TCanvas("c1", "c1", 1000, 800);*/
+/*   TLegend *leg_sample = new TLegend(0.25, 0.7, 0.45, 0.93);*/
+/*   pulse_shape_sample_1->SetTitle("Pulse Shape for all PMTs");*/
+/*   pulse_shape_sample_1->GetXaxis()->SetTitle("time (#mus)");*/
+/*   pulse_shape_sample_1->SetLineColor(1);*/
+/*   pulse_shape_sample_2->SetLineColor(2);*/
+/*   pulse_shape_sample_1->SetLineWidth(3);*/
+/*   pulse_shape_sample_2->SetLineWidth(3);*/
+/*   leg_sample->AddEntry(pulse_shape_sample_1, "Sample 1");*/
+/*   leg_sample->AddEntry(pulse_shape_sample_2, "Sample 2");*/
+/*   pulse_shape_sample_1->Draw("HIST");*/
+/*   pulse_shape_sample_2->Draw("SAME HIST");*/
+/*   leg_sample->Draw("SAME");*/
+/*   c1->SetLogy();*/
+/*   c1->SaveAs(Form("%spulse_shape.png", OutputDir.c_str()));*/
+/*   delete c1;*/
 
-  TCanvas *c2 = new TCanvas("c3", "c3", 1000, 800);
-  Qft_hist->SetTitle("Qft");
-  Qft_hist->GetXaxis()->SetTitle("time");
-  Qft_hist->GetXaxis()->SetRangeUser(0, 0.4);
-  Qft_hist->SetLineColor(1);
-  Qft_hist->SetLineWidth(3);
-  Qft_hist->Draw("HIST");
-  c2->SaveAs(Form("%sQft_diff.png", OutputDir.c_str()));
-  delete c2;
+  /* TCanvas *c2 = new TCanvas("c3", "c3", 1000, 800); */
+  /* Qft_hist->SetTitle("Qft"); */
+  /* Qft_hist->GetXaxis()->SetTitle("time"); */
+  /* Qft_hist->GetXaxis()->SetRangeUser(0, 0.4); */
+  /* Qft_hist->SetLineColor(1); */
+  /* Qft_hist->SetLineWidth(3); */
+  /* Qft_hist->Draw("HIST"); */
+  /* c2->SaveAs(Form("%sQft_diff_%d.png", OutputDir.c_str(), i)); */
+  /* delete c2; */
 
   TCanvas *c3 = new TCanvas("c3", "c3", 1000, 800);
   TLegend *leg_fPrompt = new TLegend(0.25, 0.7, 0.45, 0.93);
@@ -375,9 +403,33 @@ int main(int argc, char *argv[]) {
   fprompt_sample_1->Draw("HIST");
   fprompt_sample_2->Draw("SAME HIST");
   leg_fPrompt->Draw("SAME");
-  c3->SaveAs(Form("%sfrpompt.png", OutputDir.c_str()));
+  c3->SaveAs(Form("%sfrpompt_%d.png", OutputDir.c_str(), i));
   delete c3;
   delete leg_fPrompt;
+
+
+  TCanvas *c4 = new TCanvas("c4", "c4", 1000, 800);
+  TGraph *g = new TGraph(number_events_sample_1,&energy_sample_1[0],&prompt_fraction_sample_1[0]);
+  g->Draw("AP");
+  c4->SaveAs(Form("%sfrpompt_vs_energy_%d.png", OutputDir.c_str(), i));
+  delete c4;
+
+  TCanvas *c5 = new TCanvas("c5", "c5", 1000, 800);
+  TGraph *g2 = new TGraph(number_events_sample_1,&number_photons_sample_1[0],&prompt_fraction_sample_1[0]);
+  TGraph *g3 = new TGraph(number_events_sample_2,&number_photons_sample_2[0],&prompt_fraction_sample_2[0]);
+  g2->SetMarkerColor(1);
+  g2->SetMarkerSize(1);
+  g2->SetMarkerStyle(8);
+  g2->SetLineWidth(10);
+  g2->GetYaxis()->SetRangeUser(0,1);
+  g2->Draw("AP");
+  g3->SetMarkerColor(2);
+  g3->SetMarkerSize(1);
+  g3->SetMarkerStyle(8);
+  g3->Draw("SAME P");
+  c5->SaveAs(Form("%sfrpompt_vs_numberphotonts_%d.png", OutputDir.c_str(), i));
+  }
+  }
 
   return 0;
 }
